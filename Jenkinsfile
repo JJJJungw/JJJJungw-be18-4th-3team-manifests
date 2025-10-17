@@ -1,7 +1,6 @@
 pipeline {
     agent {
         kubernetes {
-            label 'ci-agent'
             defaultContainer 'jnlp'
             yaml """
 apiVersion: v1
@@ -104,8 +103,6 @@ spec:
                             git add .
                             git commit -m "chore: update image tag ${DOCKER_IMAGE_VERSION}" || echo "No changes to commit"
                         '''
-
-                        // ✅ sshagent 플러그인 필수
                         sshagent([GIT_CREDENTIALS_ID]) {
                             sh 'git push origin main'
                         }
