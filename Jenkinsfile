@@ -1,6 +1,7 @@
 pipeline {
     agent {
         kubernetes {
+            defaultContainer 'jnlp'
             yaml """
 apiVersion: v1
 kind: Pod
@@ -39,17 +40,28 @@ spec:
         GIT_CREDENTIALS_ID = 'git_deploy'
         GIT_USER_NAME = 'JJJJungw'
         GIT_USER_EMAIL = 'dyungwoo3600@gmail.com'
+        GIT_REPO_URL = 'git@github.com:JJJJungw/JJJJungw-be18-4th-3team-manifests.git'
     }
 
     stages {
         stage('Checkout main branch') {
             steps {
                 container('git') {
-                    checkout scm
+                    // 🔐 SSH 기반으로 clone
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: '*/main']],
+                        userRemoteConfigs: [[
+                            url: "${GIT_REPO_URL}",
+                            credentialsId: GIT_CREDENTIALS_ID
+                        ]]
+                    ])
+
                     sh '''
                         git config --global --add safe.directory /home/jenkins/agent/workspace/lumi-manifests
                         git checkout main || true
                     '''
+
                     echo "   Received Params:"
                     echo "   DOCKER_IMAGE_VERSION: ${params.DOCKER_IMAGE_VERSION}"
                     echo "   DID_BUILD_APP: ${params.DID_BUILD_APP}"
@@ -103,6 +115,7 @@ spec:
                             git add .
                             git commit -m "chore: update image tag ${DOCKER_IMAGE_VERSION}" || echo "No changes to commit"
                         '''
+                        // ✅ SSH 인증 기반 push
                         sshagent([GIT_CREDENTIALS_ID]) {
                             sh 'git push origin main'
                         }
