@@ -46,10 +46,17 @@ spec:
                     sshagent([GIT_CREDENTIALS_ID]) {
                         sh '''
                             git config --global --add safe.directory /home/jenkins/agent/workspace/lumi-manifests
+
                             rm -rf .git
                             git init
-                            git remote add origin ${GIT_REPO_URL}
+                            git remote add origin $GIT_REPO_URL
+
+                            # ✅ SSH 초기화 및 GitHub 키 등록
+                            mkdir -p ~/.ssh
+                            chmod 700 ~/.ssh
                             ssh-keyscan github.com >> ~/.ssh/known_hosts
+                            chmod 644 ~/.ssh/known_hosts
+
                             git fetch origin main
                             git checkout -b main origin/main
                         '''
@@ -69,7 +76,7 @@ spec:
                     dir('frontend') {
                         sh '''
                             echo "🔧 Updating frontend manifest..."
-                            sed -i "s|amicitia/lumi-frontend:.*|amicitia/lumi-frontend:${DOCKER_IMAGE_VERSION}|g" frontend-deploy.yaml
+                            sed -i "s|amicitia/lumi-frontend:.*|amicitia/lumi-frontend:$DOCKER_IMAGE_VERSION|g" frontend-deploy.yaml
                             git status
                         '''
                     }
@@ -84,7 +91,7 @@ spec:
                     dir('backend') {
                         sh '''
                             echo "🔧 Updating backend manifest..."
-                            sed -i "s|amicitia/lumi-backend:.*|amicitia/lumi-backend:${DOCKER_IMAGE_VERSION}|g" backend-deploy.yaml
+                            sed -i "s|amicitia/lumi-backend:.*|amicitia/lumi-backend:$DOCKER_IMAGE_VERSION|g" backend-deploy.yaml
                             git status
                         '''
                     }
@@ -98,11 +105,18 @@ spec:
                 container('git') {
                     sshagent([GIT_CREDENTIALS_ID]) {
                         sh '''
-                            git config user.name "${GIT_USER_NAME}"
-                            git config user.email "${GIT_USER_EMAIL}"
+                            git config user.name "$GIT_USER_NAME"
+                            git config user.email "$GIT_USER_EMAIL"
+
                             git add .
-                            git commit -m "chore: update image tag ${DOCKER_IMAGE_VERSION}" || echo "No changes to commit"
+                            git commit -m "chore: update image tag $DOCKER_IMAGE_VERSION" || echo "No changes to commit"
+
+                            # ✅ SSH known_hosts 재등록 (Pod은 매번 새로 뜨니까)
+                            mkdir -p ~/.ssh
+                            chmod 700 ~/.ssh
                             ssh-keyscan github.com >> ~/.ssh/known_hosts
+                            chmod 644 ~/.ssh/known_hosts
+
                             git push origin main
                         '''
                     }
