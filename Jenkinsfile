@@ -7,8 +7,8 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: gradle
-    image: gradle:8.10.2-jdk21-alpine
+  - name: git
+    image: alpine/git:2.45.2
     command: ['cat']
     tty: true
   - name: docker
@@ -18,10 +18,6 @@ spec:
     volumeMounts:
     - name: docker-sock
       mountPath: /var/run/docker.sock
-  - name: git
-    image: alpine/git:2.45.2
-    command: ['cat']
-    tty: true
   volumes:
   - name: docker-sock
     hostPath:
@@ -32,8 +28,8 @@ spec:
 
     parameters {
         string(name: 'DOCKER_IMAGE_VERSION', defaultValue: '', description: 'Docker Image Version')
-        string(name: 'DID_BUILD_APP', defaultValue: '', description: 'Did Build Frontend')
-        string(name: 'DID_BUILD_API', defaultValue: '', description: 'Did Build Backend')
+        string(name: 'DID_BUILD_APP', defaultValue: '', description: 'Did Build APP')
+        string(name: 'DID_BUILD_API', defaultValue: '', description: 'Did Build API')
     }
 
     environment {
@@ -47,25 +43,21 @@ spec:
         stage('Checkout main branch') {
             steps {
                 container('git') {
-                    // 🔐 SSH 기반으로 clone
-                    checkout([
-                        $class: 'GitSCM',
-                        branches: [[name: '*/main']],
-                        userRemoteConfigs: [[
-                            url: "${GIT_REPO_URL}",
-                            credentialsId: GIT_CREDENTIALS_ID
-                        ]]
-                    ])
-
-                    sh '''
-                        git config --global --add safe.directory /home/jenkins/agent/workspace/lumi-manifests
-                        git checkout main || true
-                    '''
-
-                    echo "   Received Params:"
-                    echo "   DOCKER_IMAGE_VERSION: ${params.DOCKER_IMAGE_VERSION}"
-                    echo "   DID_BUILD_APP: ${params.DID_BUILD_APP}"
-                    echo "   DID_BUILD_API: ${params.DID_BUILD_API}"
+                    sshagent([GIT_CREDENTIALS_ID]) {
+                        sh '''
+                            git config --global --add safe.directory /home/jenkins/agent/workspace/lumi-manifests
+                            rm -rf .git
+                            git init
+                            git remote add origin ${GIT_REPO_URL}
+                            ssh-keyscan github.com >> ~/.ssh/known_hosts
+                            git fetch origin main
+                            git checkout -b main origin/main
+                        '''
+                    }
+                    echo "📦 Checked out main branch"
+                    echo "DOCKER_IMAGE_VERSION: ${params.DOCKER_IMAGE_VERSION}"
+                    echo "DID_BUILD_APP: ${params.DID_BUILD_APP}"
+                    echo "DID_BUILD_API: ${params.DID_BUILD_API}"
                 }
             }
         }
@@ -76,7 +68,6 @@ spec:
                 container('git') {
                     dir('frontend') {
                         sh '''
-                            git config --global --add safe.directory /home/jenkins/agent/workspace/lumi-manifests
                             echo "🔧 Updating frontend manifest..."
                             sed -i "s|amicitia/lumi-frontend:.*|amicitia/lumi-frontend:${DOCKER_IMAGE_VERSION}|g" frontend-deploy.yaml
                             git status
@@ -92,7 +83,6 @@ spec:
                 container('git') {
                     dir('backend') {
                         sh '''
-                            git config --global --add safe.directory /home/jenkins/agent/workspace/lumi-manifests
                             echo "🔧 Updating backend manifest..."
                             sed -i "s|amicitia/lumi-backend:.*|amicitia/lumi-backend:${DOCKER_IMAGE_VERSION}|g" backend-deploy.yaml
                             git status
@@ -102,37 +92,31 @@ spec:
             }
         }
 
-        stage('Commit & Push Changes') {
-            when { expression { params.DID_BUILD_APP == "true" || params.DID_BUILD_API == "true" } }
+        stage('Commit & Push') {
+            when { expression { params.DID_BUILD_API == "true" || params.DID_BUILD_APP == "true" } }
             steps {
                 container('git') {
-                    script {
-                        echo "📤 Committing updated manifests..."
+                    sshagent([GIT_CREDENTIALS_ID]) {
                         sh '''
-                            git config --global --add safe.directory /home/jenkins/agent/workspace/lumi-manifests
                             git config user.name "${GIT_USER_NAME}"
                             git config user.email "${GIT_USER_EMAIL}"
                             git add .
                             git commit -m "chore: update image tag ${DOCKER_IMAGE_VERSION}" || echo "No changes to commit"
+                            ssh-keyscan github.com >> ~/.ssh/known_hosts
+                            git push origin main
                         '''
-                        // ✅ SSH 인증 기반 push
-                        sshagent([GIT_CREDENTIALS_ID]) {
-                            sh 'git push origin main'
-                        }
                     }
                 }
-            }
-        }
-
-        stage('Trigger ArgoCD Sync') {
-            steps {
-                echo "🚀 ArgoCD will auto-sync manifests after commit"
             }
         }
     }
 
     post {
-        success { echo "✅ Manifests updated successfully" }
-        failure { echo "❌ Failed to update manifests" }
+        success {
+            echo "✅ Manifests updated successfully and pushed to GitHub"
+        }
+        failure {
+            echo "❌ Failed to update manifests"
+        }
     }
 }
