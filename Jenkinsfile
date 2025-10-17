@@ -46,19 +46,18 @@ spec:
                     sshagent([GIT_CREDENTIALS_ID]) {
                         sh '''
                             git config --global --add safe.directory /home/jenkins/agent/workspace/lumi-manifests
+                            git remote set-url origin $GIT_REPO_URL
 
-                            rm -rf .git
-                            git init
-                            git remote add origin $GIT_REPO_URL
-
-                            # ✅ SSH 초기화 및 GitHub 키 등록
+                            # ✅ SSH 디렉토리 및 known_hosts 등록
                             mkdir -p ~/.ssh
                             chmod 700 ~/.ssh
                             ssh-keyscan github.com >> ~/.ssh/known_hosts
                             chmod 644 ~/.ssh/known_hosts
 
+                            # ✅ 최신 main 브랜치 가져오기
                             git fetch origin main
-                            git checkout -b main origin/main
+                            git checkout main
+                            git pull origin main
                         '''
                     }
                     echo "📦 Checked out main branch"
@@ -111,7 +110,7 @@ spec:
                             git add .
                             git commit -m "chore: update image tag $DOCKER_IMAGE_VERSION" || echo "No changes to commit"
 
-                            # ✅ SSH known_hosts 재등록 (Pod은 매번 새로 뜨니까)
+                            # ✅ SSH 재등록 (Pod은 매번 새로 뜨니까)
                             mkdir -p ~/.ssh
                             chmod 700 ~/.ssh
                             ssh-keyscan github.com >> ~/.ssh/known_hosts
