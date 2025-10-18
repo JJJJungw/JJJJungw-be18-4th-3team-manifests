@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: amicitia/lumi:latest
+          image: amicitia/lumi-backend:latest
           ports:
             - containerPort: 8080
           env:
