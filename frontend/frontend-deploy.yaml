@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: jenkins-fiveguys
   labels:
     app: frontend
 spec:
@@ -39,4 +38,3 @@ spec:
               port: 80
             initialDelaySeconds: 5
             periodSeconds: 10
-
