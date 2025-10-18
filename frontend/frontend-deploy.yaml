@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: amicitia/lumi-frontend:latest
+          image: amicitia/lumi-frontend:59
           ports:
             - containerPort: 80
           resources:
